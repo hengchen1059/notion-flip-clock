@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flip Clock</title>
+<style>
+  :root {
+    --card-w: clamp(26px, 11vw, 46px);
+    --card-h: clamp(38px, 16vw, 66px);
+    --font-size: clamp(20px, 8.5vw, 36px);
+    --gap: clamp(3px, 1.2vw, 6px);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  .clock {
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+  }
+
+  .unit {
+    display: flex;
+    gap: calc(var(--gap) / 2);
+  }
+
+  .card {
+    position: relative;
+    width: var(--card-w);
+    height: var(--card-h);
+    border-radius: 4px;
+    background: #161616;
+    perspective: 300px;
+  }
+
+  .card::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 1px;
+    background: rgba(0,0,0,0.6);
+    z-index: 5;
+  }
+
+  .face {
+    position: absolute;
+    left: 0; right: 0;
+    width: 100%;
+    height: 50%;
+    overflow: hidden;
+    background: #161616;
+  }
+  .face.upper { top: 0; border-radius: 4px 4px 0 0; }
+  .face.lower { bottom: 0; border-radius: 0 0 4px 4px; background: #101010; }
+
+  .face .num {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: var(--card-h);
+    line-height: var(--card-h);
+    text-align: center;
+    color: #f2f2f2;
+    font-size: var(--font-size);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .face.upper .num { top: 0; }
+  .face.lower .num { top: calc(-1 * var(--card-h) / 2); }
+
+  /* animated flap, only present during a flip */
+  .flap {
+    position: absolute;
+    left: 0; right: 0;
+    width: 100%;
+    height: 50%;
+    overflow: hidden;
+    z-index: 10;
+    backface-visibility: hidden;
+    transform-style: preserve-3d;
+  }
+  .flap.top {
+    top: 0;
+    border-radius: 4px 4px 0 0;
+    background: #161616;
+    transform-origin: bottom center;
+  }
+  .flap.bottom {
+    bottom: 0;
+    border-radius: 0 0 4px 4px;
+    background: #101010;
+    transform-origin: top center;
+    transform: rotateX(90deg);
+  }
+  .flap .num {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: var(--card-h);
+    line-height: var(--card-h);
+    text-align: center;
+    color: #f2f2f2;
+    font-size: var(--font-size);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .flap.top .num { top: 0; }
+  .flap.bottom .num { top: calc(-1 * var(--card-h) / 2); }
+
+  @keyframes flipTop {
+    from { transform: rotateX(0deg); }
+    to   { transform: rotateX(-90deg); }
+  }
+  @keyframes flipBottom {
+    from { transform: rotateX(90deg); }
+    to   { transform: rotateX(0deg); }
+  }
+  .flap.top.animating { animation: flipTop 0.28s ease-in forwards; }
+  .flap.bottom.animating { animation: flipBottom 0.28s ease-out forwards; animation-delay: 0.28s; }
+
+  .colon {
+    color: #f2f2f2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(6px, 2.5vw, 12px);
+    opacity: 0.7;
+  }
+  .colon span {
+    width: clamp(4px, 1.6vw, 7px);
+    height: clamp(4px, 1.6vw, 7px);
+    background: #f2f2f2;
+    border-radius: 50%;
+    display: block;
+  }
+
+  .meridiem {
+    margin-left: clamp(6px, 2.5vw, 12px);
+    color: #f2f2f2;
+    font-size: clamp(10px, 3.2vw, 15px);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    opacity: 0.55;
+  }
+</style>
+</head>
+<body>
+
+  <div class="clock">
+    <div class="unit" id="hoursUnit"></div>
+    <div class="colon"><span></span><span></span></div>
+    <div class="unit" id="minutesUnit"></div>
+    <div class="meridiem" id="meridiem">AM</div>
+  </div>
+
+<script>
+  function makeCard(initialVal) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML =
+      '<div class="face upper"><div class="num up-num">' + initialVal + '</div></div>' +
+      '<div class="face lower"><div class="num low-num">' + initialVal + '</div></div>';
+    return card;
+  }
+
+  function setCard(card, oldVal, newVal) {
+    if (oldVal === newVal) return;
+
+    const upNum = card.querySelector('.up-num');
+    const lowNum = card.querySelector('.low-num');
+
+    // reveal new value underneath immediately (bottom static face)
+    lowNum.textContent = newVal;
+
+    // build temporary animated flaps
+    const topFlap = document.createElement('div');
+    topFlap.className = 'flap top';
+    topFlap.innerHTML = '<div class="num">' + oldVal + '</div>';
+
+    const bottomFlap = document.createElement('div');
+    bottomFlap.className = 'flap bottom';
+    bottomFlap.innerHTML = '<div class="num">' + newVal + '</div>';
+
+    card.appendChild(topFlap);
+    card.appendChild(bottomFlap);
+
+    requestAnimationFrame(() => {
+      topFlap.classList.add('animating');
+      bottomFlap.classList.add('animating');
+    });
+
+    setTimeout(() => {
+      upNum.textContent = newVal;
+      topFlap.remove();
+      bottomFlap.remove();
+    }, 580);
+  }
+
+  function pad(n) { return n.toString().padStart(2, '0'); }
+
+  let hourCards = [];
+  let minuteCards = [];
+  const state = { h: ['', ''], m: ['', ''] };
+
+  function buildClock() {
+    const now = new Date();
+    let hours = now.getHours() % 12;
+    if (hours === 0) hours = 12;
+    const minutes = now.getMinutes();
+    const meridiem = now.getHours() >= 12 ? 'PM' : 'AM';
+
+    const hStr = pad(hours).split('');
+    const mStr = pad(minutes).split('');
+
+    const hoursUnit = document.getElementById('hoursUnit');
+    const minutesUnit = document.getElementById('minutesUnit');
+    hoursUnit.innerHTML = '';
+    minutesUnit.innerHTML = '';
+    hourCards = [];
+    minuteCards = [];
+
+    hStr.forEach((val, i) => {
+      const c = makeCard(val);
+      hoursUnit.appendChild(c);
+      hourCards.push(c);
+      state.h[i] = val;
+    });
+    mStr.forEach((val, i) => {
+      const c = makeCard(val);
+      minutesUnit.appendChild(c);
+      minuteCards.push(c);
+      state.m[i] = val;
+    });
+
+    document.getElementById('meridiem').textContent = meridiem;
+  }
+
+  function tick() {
+    const now = new Date();
+    let hours = now.getHours() % 12;
+    if (hours === 0) hours = 12;
+    const minutes = now.getMinutes();
+    const meridiem = now.getHours() >= 12 ? 'PM' : 'AM';
+
+    const hStr = pad(hours).split('');
+    const mStr = pad(minutes).split('');
+
+    hStr.forEach((val, i) => {
+      setCard(hourCards[i], state.h[i], val);
+      state.h[i] = val;
+    });
+    mStr.forEach((val, i) => {
+      setCard(minuteCards[i], state.m[i], val);
+      state.m[i] = val;
+    });
+
+    document.getElementById('meridiem').textContent = meridiem;
+  }
+
+  buildClock();
+  setInterval(tick, 1000);
+</script>
+
+</body>
+</html>
